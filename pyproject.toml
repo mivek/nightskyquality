@@ -1,0 +1,19 @@
+[project]
+name = "nightskyquality"
+version = "0.1.0"
+description = "Tracking night sky changes in Big Bend National Park"
+authors = [{name = "Katy Abbott"}]
+license = {text = "CC0-1.0"}
+readme = "README.md"
+requires-python = ">=3.6"
+
+[tool.semantic_release]
+version_variable = "pyproject.toml:version"
+branch = "main"
+build_command = false
+changelog_file = "CHANGELOG.md"
+upload_to_pypi = false
+upload_to_release = true
+remove_dist = false
+patch_without_tag = true
+commit_parser = "angular"
