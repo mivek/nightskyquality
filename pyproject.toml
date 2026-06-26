@@ -1,11 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "nightskyquality"
 version = "0.1.0"
-description = "Tracking night sky changes in Big Bend National Park"
-authors = [{name = "Katy Abbott"}]
-license = {text = "CC0-1.0"}
+description = "Modernized ALR (All-sky Light pollution Ratio) calculation from VIIRS radiance GeoTIFFs"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Katy Abbott (original ALR algorithm)"},
+    {name = "nightskyquality maintainers"},
+]
+maintainers = [
+    {name = "nightskyquality maintainers"},
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "rasterio>=1.3",
+    "shapely>=2.0",
+]
+
+[project.urls]
+Source = "https://github.com/BigBendNP/nightskyquality"
+"Original fork" = "https://github.com/katyabbott/nps-night-rad"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["nightskyquality*"]
 
 [tool.semantic_release]
 version_variable = "pyproject.toml:version"
