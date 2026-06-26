@@ -25,3 +25,7 @@ Breaking changes: append `!` after the type, e.g. `feat!: drop Python 3.6 suppor
 ## Pull Requests
 
 PR titles must also follow conventional commits. PRs with non-conforming commit messages will be flagged by CI.
+
+## Versioning
+
+Versions follow [Semantic Versioning](https://semver.org/) and are managed automatically by `python-semantic-release` on every push to `main`.
