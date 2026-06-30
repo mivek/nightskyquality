@@ -1,64 +1,128 @@
-# Tracking night sky changes in Big Bend National Park
-This repository contains a collection of scripts for calculating all-sky average light pollution from satellite data and visualizing changes in night-time sky quality over time. It was created to understand the effects of nearby and faraway light sources on Big Bend National Park's sky quality, using open-source tools. 
+# nightskyquality
 
-To see the data visualization from 2012 to 2019, click [here](https://bigbendnp.github.io/nightskyquality/pages/nightskyviz.html). To learn more about the methodology, read on.
+Modernized Python library for computing the **All-sky Light pollution Ratio (ALR)** from VIIRS Day/Night Band radiance GeoTIFFs.
 
-<p align="center">
-  <a href="https://bigbendnp.github.io/nightskyquality/pages/nightskyviz.html">
-  <img src="images/ALR_classification_May_Nov_cropped.png?raw=true">
-  </a>
-  <br/> Night sky quality calculated biannually between 2012 to 2019 in the Big Bend region, visualized by sky-quality classes.
-</p>
+**ALR** is a unitless ratio of anthropogenic to natural sky brightness over the entire hemisphere of vision, as defined by [Duriscoe et al. (2018)](https://www.researchgate.net/publication/324789721_A_simplified_model_of_all-sky_artificial_sky_glow_derived_from_VIIRS_DayNight_band_data).
 
-## TL;DR
+This library implements the master-kernel FFT convolution approach: precompute one weighted kernel `K = C · Σ wᵢ · kᵢ`, then a single FFT convolution per tile. This is ~38× faster than per-ring convolution and produces identical numerical results.
 
-The main script in this repository, `Clip_raster_and_calculate_ALR_Python.py`, takes in a [satellite image composite](https://eogdata.mines.edu/download_dnb_composites.html) of average night-time radiance for a single month and outputs the all-sky average light pollution ratio (ALR), a metric that reflects the effects of artificial light on sky quality from up to 300 kilometers away. ALR can be used to quantify visual sky quality classes:
+---
 
-| Sky quality class | ALR |
-| ----------------- | --- |
-| Good | 0 - 0.33 |
-| Moderate (threatened) | 0.33 - 2.0 |
-| Poor (for sensitive protected areas) | 2.0 - 10.0 |
-| Milky Way invisible | > 10.0 |
+## Credits
 
-By calculating ALR and the associated sky quality over the dates available from the VIIRS instrument, we can begin to quantify how night-sky quality is changing over time, and identify threat to our night skies from light pollution elsewhere. 
+- **Katy Abbott** — original implementation (Geoscientists-in-the-Parks intern at Big Bend National Park, 2019–2020). See the original [BigBendNP/nightskyquality](https://github.com/BigBendNP/nightskyquality) repository (MIT).
+- **Original fork source:** [katyabbott/nps-night-rad](https://github.com/katyabbott/nps-night-rad)
+- **Scientific basis:** Duriscoe, D. et al. (2018). *A simplified model of all-sky artificial sky glow derived from VIIRS Day/Night band data.* Journal of Quantitative Spectroscopy and Radiative Transfer, 214, 133–145.
+- **Calibration method:** Upstream pipeline spec §6 describes calibration via control points (dark-sky reference + heavily light-polluted reference).
 
-## How the algorithm works
-[Duriscoe et al. (2018)](https://www.researchgate.net/publication/324789721_A_simplified_model_of_all-sky_artificial_sky_glow_derived_from_VIIRS_DayNight_band_data) used the Suomi NPP satellite's [Visible Infrared Imaging Radiometer Suite nighttime sensor (the Day/Night Band)](https://maps.ngdc.noaa.gov/viewers/VIIRS_DNB_nighttime_imagery/index.html), which measures nighttime upward radiance, to calculate what they called the all-sky average light pollution ratio (ALR), a unitless ratio of anthropogenic to natural conditions that takes into account the effects of skyglow over the entire hemisphere of vision.
+---
 
-<p align="center">
-  <img src="https://www.nps.gov/subjects/nightskies/images/panoramic-big_1.jpg?maxwidth=650&autorotate=false">
-  <br/> False color negative, panoramic image from Palomar Observatory (California Institute of Technology) identifies natural and human-caused sky brightness <br/>
-NPS / Palomar Observatory (California Institute of Technology)
-</p>
+## Installation
 
-### Theoretical and model equations
-ALR at a point can be calculated by summing the contributions of individual upward radiance values, weighted by their distance from the point, up to a radius of 300 km away. i.e. ALR = c &sum;r<sub>i</sub>d<sub>i</sub><sup>-&alpha;</sup>, where c is a calibration constant to compare the calculated output to observation data, &alpha; is a weighting function relating brightness to distance, d<sub>i</sub> is the distance from the point, and r<sub>i</sub> is the upward radiance at the distance of interest.
+```bash
+# Development install (from repo root)
+pip install -e .
 
-Duriscoe et al. also derived a brightness/distance function using observational data from the western United States to relate brightness to distance from a source, with &alpha; = 2.3 ((d &#47; 350)<sup>0.28</sup>)
+# Once published to PyPI:
+pip install nightskyquality
+```
 
-Below is a schematic from Duriscoe et al. explaining this process. 
+Requires Python ≥ 3.10, NumPy ≥ 1.24, SciPy ≥ 1.10, Rasterio ≥ 1.3, Shapely ≥ 2.0.
 
-![image](https://www.researchgate.net/profile/Dan_Duriscoe/publication/324789721/figure/fig4/AS:628370182258695@1526826534880/The-flowchart-for-the-python-script-that-creates-the-dataset-a-TIFF-image-of-ALR-values.png)
+> **Note on Shapely:** Shapely is included as a dependency for future ROI clipping support per the upstream design's optional geopandas/shapely buffer path. The current implementation does NOT use Shapely — ALR is calculated over the full raster extent with no clipping.
 
-### Open-source GIS
-This process can be optimized using open-source geospatial tools and image-processing techniques. To calculate ALR at a single point, we look at the contribution from N equally spaced annuli up to 300 km away. Along each annulus, the radius is constant and hence the distance weighting parameter, d<sub>i</sub><sup>-&alpha;</sup>, is also constant, so a single annulus's contribution to ALR is the sum of upward radiances around that annulus, multiplied by the value of d<sub>i</sub><sup>-&alpha;</sup> at that radius. This process is repeated across all N annuli, and at every point in the image.
+---
 
-Calculating the sum of upward radiance at a single annulus across the entire image simplifies to a convolution of the image, where the kernel is a matrix of 0s and 1s representing the annulus. For example, with a annulus radius of 2, our kernel looks like this:
+## Quick start
 
-| 0 | 0 | 1 | 0 | 0 | 
-|---|---|---|---|---|
-| **0** | **1** | **0** | **1** | **0** | 
-| **1** | **0** | **0** | **0** | **1** |
-| **0** | **1** | **0** | **1** | **0** | 
-| **0** | **0** | **1** | **0** | **0** |
+```python
+from nightskyquality import radiance_to_alr
 
-The output convolution for each annulus is then normalized by the distance weighting parameter and then all normalized outputs are summed together to produce a complete ALR raster. Next, the raster is multiplied by the calibration constant C = 1/562.72, to relate model output to observational values of ALR. The convolution makes use of a Fast Fourier Transform, and the time to process a single VIIRS image for the Big Bend area (about 350,000 km<sup></sup>), including opening the compressed image file and clipping, was about 10 minutes on a single machine. 
+result = radiance_to_alr(
+    radiance_path="path/to/viirs_monthly_composite.tif",
+    equal_area_epsg=3035,       # ETRS89-LAEA for Europe
+    work_resolution_m=450,
+    rings=38,
+    max_km=300,
+    alpha_base=2.3,
+    alpha_exp=0.28,
+    calib_c=1/562.72,
+    noise_floor=0.5,
+)
 
-For more information on how to calculate ALR for your own region, check out the [how-to page](https://github.com/bigbendnp/nightskyquality/blob/master/HOWTO.md).
+# result.data   — 2D numpy array (float64) of ALR values
+# result.profile — rasterio profile dict for writing to GeoTIFF
 
-This repository and the data visualization were developed by Katy Abbott, a Geoscientists-in-the-Parks intern at Big Bend National Park in 2019-2020.
+# Write result to disk:
+import rasterio
+with rasterio.open("alr_output.tif", "w", **result.profile) as dst:
+    dst.write(result.data, 1)
+```
+
+The function reads the input GeoTIFF, reprojects to the specified equal-area CRS at the working resolution, computes ALR via FFT convolution, then reprojects back to the **input's original CRS**. No files are written — the result is returned in memory.
+
+---
+
+## ALR formula
+
+```
+ALR(p) = C · Σᵢ w(rᵢ) · Σ_{q ∈ annulus i} radiance(q)
+
+where:
+  w(r) = r^(-α(r))
+  α(r) = α_base · (r / 350)^α_exp
+  C    = calibration constant (default 1/562.72, from Duriscoe US calibration)
+```
+
+The master kernel `K` pre-computes the weighted sum across all rings, enabling a single FFT convolution per tile.
+
+### EPSG guidance
+
+| Region | Recommended equal-area projection | EPSG |
+|--------|-----------------------------------|------|
+| Europe | ETRS89-LAEA | 3035 |
+| North America | NAD83 / Conus Albers | 5070 |
+| Alaska | NAD83 / Alaska Albers | 3338 |
+| Global (land) | WGS 84 / World Mollweide | 54009 |
+| Arctic | NSIDC Sea Ice Polar Stereographic North | 3413 |
+| Antarctica | NSIDC Sea Ice Polar Stereographic South | 3976 |
+
+---
+
+## Europe calibration
+
+The default calibration constant `C = 1/562.72` is derived from Duriscoe's observational data in the western United States. For **relative ranking** of ALR within a region, this constant is sufficient.
+
+For **absolute Bortle classification** in European conditions, the constant may need recalibration via control points (see upstream pipeline spec §6):
+
+1. Select a dark-sky reference site (known Bortle 1-2) and a heavily light-polluted site (Bortle 8-9).
+2. Run `radiance_to_alr` with `calib_c=1.0` to get uncalibrated raw Σ values.
+3. Solve for `C` such that the raw values map to the expected ALR thresholds.
+
+The included geographic validation test (`tests/test_geographic_validation.py`) uses Paris (Bortle 8-9) as a reference — it is skipped by default and requires a real VIIRS radiance GeoTIFF.
+
+---
+
+## Tiling
+
+Large rasters are processed in tiles of 2000×2000 pixels with `R_px` overlap (where `R_px = max_km * 1000 / work_resolution_m`). Each tile is convolved independently, then the valid (non-overlapping) regions are assembled into the final mosaic. This keeps memory usage bounded regardless of input size.
+
+---
+
+## Testing
+
+```bash
+pytest tests/ -v
+```
+
+Run the geographic validation test (requires real VIIRS data):
+
+```bash
+ALR_PARIS_RADIANCE=/path/to/paris_viirs.tif pytest tests/test_geographic_validation.py -v
+```
+
+---
 
 ## License
 
-See [LICENSE.txt](/LICENSE.txt)
+MIT License — Copyright (c) 2020 Katy Abbott. See [LICENSE.txt](./LICENSE.txt).
